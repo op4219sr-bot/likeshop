@@ -40,6 +40,7 @@ class Pay extends Model
     const ALI_PAY = 2;//支付宝支付
     const BALANCE_PAY = 3;//余额支付
     const OFFLINE_PAY = 4;//线下支付
+    const EPAY = 5;//易支付（彩虹易支付 / 自建免签支付）
 
 
     //支付状态
@@ -66,6 +67,7 @@ class Pay extends Model
             self::WECHAT_PAY => '微信支付',
             self::ALI_PAY => '支付宝支付',
             self::BALANCE_PAY => '余额支付',
+            self::EPAY => '易支付',
             // self::OFFLINE_PAY => '线下支付',
         ];
 
