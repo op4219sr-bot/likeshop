@@ -1,0 +1,210 @@
+{layout name="layout2" /}
+<style>
+    .layui-form-label{
+        width: 120px;
+    }
+    .pay-li {
+        float: left;
+        opacity: 1;
+        position: relative;
+    }
+    .pay-img {
+        width: 80px;
+        height: 80px;
+        padding: 4px;
+    }
+    .pay-img-del-x {
+        position: absolute;
+        z-index: 100;
+        top: -4px;
+        right: -2px;
+        width: 20px;
+        height: 20px;
+        font-size: 16px;
+        line-height: 16px;
+        color: #fff;
+        text-align: center;
+        cursor: pointer;
+        background: hsla(0, 0%, 60%, .6);
+        border-radius: 10px;
+    }
+</style>
+<div class="layui-form" lay-filter="layuiadmin-form-epay" id="layuiadmin-form-epay" style="padding: 20px 30px 0 0;">
+
+    <div class="layui-form-item">
+        <label class="layui-form-label">支付简称：</label>
+        <div class="layui-input-block">
+            <div class="layui-col-md4">
+                <input type="text" name="short_name" value="{$info.short_name | default = '易支付'}" lay-verify="check_required" lay-verType="tips"  autocomplete="off" class="layui-input">
+                <div class="layui-form-mid layui-word-aux">会员在商城看见的支付名称</div>
+            </div>
+        </div>
+    </div>
+
+    <div class="layui-form-item">
+        <label class="layui-form-label">支付图标</label>
+        <div class="layui-input-inline">
+            <div style="height:80px;line-height:80px">
+                <input name="icon" type="hidden" value="{$info.icon | default = ''}">
+                {if !empty($info.icon)}
+                <div class="pay-img-add" style="display: none" ></div>
+                <div class="pay-li">
+                    <img class="pay-img" src="{$info.icon}">
+                    <a class="pay-img-del-x" style="display: none">x</a>
+                </div>
+                {else}
+                <div class="pay-img-add" ></div>
+                {/if}
+            </div>
+        </div>
+        <div class="layui-form-item">
+            <label class="layui-form-label"></label>
+            <label class=" layui-form-mid layui-word-aux">支付方式图标。建议尺寸：宽100px*高100px，jpg，jpeg，png格式</label>
+        </div>
+    </div>
+
+    <div class="layui-form-item">
+        <label class="layui-form-label">网关地址：</label>
+        <div class="layui-input-block">
+            <div class="layui-col-md6">
+                <input type="text" name="gateway" value="{$info.config.gateway | default = ''}" placeholder="例如 https://pay.example.com" lay-verify="check_required" lay-verType="tips" autocomplete="off" class="layui-input">
+                <div class="layui-form-mid layui-word-aux">易支付站点根地址，无需带 /submit.php</div>
+            </div>
+        </div>
+    </div>
+
+    <div class="layui-form-item">
+        <label class="layui-form-label">商户ID（PID）：</label>
+        <div class="layui-input-block">
+            <div class="layui-col-md4">
+                <input type="text" name="pid" value="{$info.config.pid | default = ''}" lay-verify="check_required" lay-verType="tips" autocomplete="off" class="layui-input">
+                <div class="layui-form-mid layui-word-aux">易支付后台分配的商户编号</div>
+            </div>
+        </div>
+    </div>
+
+    <div class="layui-form-item">
+        <label class="layui-form-label">商户密钥（KEY）：</label>
+        <div class="layui-input-block">
+            <div class="layui-col-md6">
+                <input type="text" name="key" value="{$info.config.key | default = ''}" lay-verify="check_required" lay-verType="tips" autocomplete="off" class="layui-input">
+                <div class="layui-form-mid layui-word-aux">易支付后台分配的 MD5 密钥（不要泄露）</div>
+            </div>
+        </div>
+    </div>
+
+    <div class="layui-form-item">
+        <label class="layui-form-label">默认支付类型：</label>
+        <div class="layui-input-block">
+            <div class="layui-col-md4">
+                <input type="text" name="default_type" value="{$info.config.default_type | default = ''}" placeholder="留空 = 跳转易支付收银台让用户选" autocomplete="off" class="layui-input">
+                <div class="layui-form-mid layui-word-aux">可选 alipay / wxpay / qqpay / usdt 等；留空展示收银台</div>
+            </div>
+        </div>
+    </div>
+
+    <div class="layui-form-item">
+        <label class="layui-form-label">站点名称：</label>
+        <div class="layui-input-block">
+            <div class="layui-col-md4">
+                <input type="text" name="site_name" value="{$info.config.site_name | default = ''}" placeholder="可选" autocomplete="off" class="layui-input">
+                <div class="layui-form-mid layui-word-aux">支付时显示在易支付收银台顶部</div>
+            </div>
+        </div>
+    </div>
+
+    <div class="layui-form-item">
+        <label class="layui-form-label">异步通知地址：</label>
+        <div class="layui-input-block">
+            <div class="layui-col-md8">
+                <input type="text" readonly value="{$domain}/api/payment/epayNotify" class="layui-input">
+                <div class="layui-form-mid layui-word-aux">复制到易支付商户后台对应字段（通常无需配置，由本系统自动传递）</div>
+            </div>
+        </div>
+    </div>
+
+    <div class="layui-form-item">
+        <label class="layui-form-label">排序：</label>
+        <div class="layui-input-block">
+            <div class="layui-col-md4">
+                <input type="number"  name="sort" value="{$info.sort | default = 0}" placeholder="请输入排序" class="layui-input">
+                <div class=" layui-form-mid layui-word-aux">排序越小越前</div>
+            </div>
+        </div>
+    </div>
+
+    <div class="layui-form-item" id="pay_use">
+        <label class="layui-form-label" >状态：</label>
+        <div class="layui-input-block">
+            <input type="radio" name="status" value=1 title="启用"{if condition="$info.status eq 1" }checked{/if}>
+            <input type="radio" name="status" value=0 title="关闭" {if condition="$info.status neq 1" }checked{/if}>
+        </div>
+    </div>
+
+    <div class="layui-form-item layui-hide">
+        <input type="button" lay-submit lay-filter="pay_config-submit-edit" id="pay_config-submit-edit" value="确认">
+    </div>
+</div>
+
+<script>
+    layui.config({
+        version:"{$front_version}",
+        base: '/static/plug/layui-admin/dist/layuiadmin/'
+    }).extend({
+        index: 'lib/index'
+    }).use(['index', 'form','like'], function(){
+        var $ = layui.$
+            ,form = layui.form
+            ,like = layui.like;
+
+        like.imageUpload('.pay-img-add', function (uri, element) {
+            if(uri.length>1){
+                layer.msg('最多最能选中1张图片');
+                return;
+            }
+            var html = '<div class="pay-li">\n' +
+                '<img class="pay-img" ' +
+                'src="' + uri[0] + '">' +
+                '<a class="pay-img-del-x">x</a>' +
+                '</div>';
+            element.prev().val(like.getUrlFileName(uri[0], '{$storageUrl}'));
+            element.parent().append(html);
+            element.css('display','none');
+        }, true);
+
+        $(document).on('click', '.pay-img-del-x', function () {
+            $(this).parent().siblings('input').val('');
+            $(this).parent().prev().css('display','block');
+            $(this).parent().remove();
+        });
+
+        $(document).on('click', '.pay-img', function () {
+            var image = $(this).attr('src');
+            like.showImg(image,400);
+        });
+
+        $(document).on('mouseover', '.pay-img', function () {
+            $(this).next().show();
+        });
+        $(document).on('mouseout', '.pay-img', function () {
+            $(this).next().hide();
+        });
+        $(document).on('mouseover', '.pay-img-del-x', function () {
+            $(this).show();
+        });
+        $(document).on('mouseout', '.pay-img-del-x', function () {
+            $(this).hide();
+        });
+
+        form.verify({
+            check_required: function (value, item) {
+                var status = $('input[name="status"]:checked').val();
+                value = (value || '').trim();
+                if (status == 1 && value.length == 0) {
+                    return '请填写完整';
+                }
+            }
+        });
+
+    })
+</script>

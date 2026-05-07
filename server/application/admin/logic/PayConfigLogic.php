@@ -2,18 +2,6 @@
 // +----------------------------------------------------------------------
 // | likeshop开源商城系统
 // +----------------------------------------------------------------------
-// | 欢迎阅读学习系统程序代码，建议反馈是我们前进的动力
-// | gitee下载：https://gitee.com/likeshop_gitee
-// | github下载：https://github.com/likeshop-github
-// | 访问官网：https://www.likeshop.cn
-// | 访问社区：https://home.likeshop.cn
-// | 访问手册：http://doc.likeshop.cn
-// | 微信公众号：likeshop技术社区
-// | likeshop系列产品在gitee、github等公开渠道开源版本可免费商用，未经许可不能去除前后端官方版权标识
-// |  likeshop系列产品收费版本务必购买商业授权，购买去版权授权后，方可去除前后端官方版权标识
-// | 禁止对系统程序代码以任何目的，任何形式的再发布
-// | likeshop团队版权所有并拥有最终解释权
-// +----------------------------------------------------------------------
 // | author: likeshop.cn.team
 // +----------------------------------------------------------------------
 
@@ -43,12 +31,6 @@ class PayConfigLogic
     }
 
 
-    /**
-     * Notes: 余额支付
-     * @param $post
-     * @author 段誉(2021/3/10 11:42)
-     * @return bool
-     */
     public static function editBalance($post)
     {
         $payModel = new Pay();
@@ -56,12 +38,6 @@ class PayConfigLogic
     }
 
 
-    /**
-     * Notes: 微信支付
-     * @param $post
-     * @author 段誉(2021/3/10 10:30)
-     * @return bool
-     */
     public static function editWechat($post)
     {
         $config = [
@@ -77,24 +53,48 @@ class PayConfigLogic
     }
 
 
-    /**
-     * Notes: 支付宝
-     * @param $post
-     * @author 段誉(2021/3/10 11:43)
-     * @return int|string
-     * @throws \think\Exception
-     * @throws \think\exception\PDOException
-     */
     public static function editAlipay($post)
     {
         $config = [
             'app_id' => $post['app_id'],
-            'private_key' => $post['private_key'],//应用私钥
-            'ali_public_key' => $post['ali_public_key']//支付宝公钥
+            'private_key' => $post['private_key'],
+            'ali_public_key' => $post['ali_public_key']
         ];
         $post['config'] = json_encode($config, JSON_UNESCAPED_UNICODE);
         $payModel = new Pay();
         return $payModel->allowField(true)->save($post, ['code' => 'alipay']);
+    }
+
+
+    /**
+     * 易支付配置（首次编辑时若 pay 表无对应行则自动写入）
+     */
+    public static function editEpay($post)
+    {
+        $config = [
+            'gateway'      => trim($post['gateway'] ?? ''),
+            'pid'          => trim($post['pid'] ?? ''),
+            'key'          => trim($post['key'] ?? ''),
+            'default_type' => trim($post['default_type'] ?? ''),
+            'site_name'    => trim($post['site_name'] ?? ''),
+        ];
+        $post['config'] = json_encode($config, JSON_UNESCAPED_UNICODE);
+
+        $payModel = new Pay();
+        $exists = Db::name('dev_pay')->where(['code' => 'epay'])->find();
+        if ($exists) {
+            return $payModel->allowField(true)->save($post, ['code' => 'epay']);
+        }
+        $insert = [
+            'code'       => 'epay',
+            'name'       => $post['name'] ?? '易支付',
+            'short_name' => $post['short_name'] ?? '易支付',
+            'icon'       => $post['icon'] ?? '',
+            'sort'       => intval($post['sort'] ?? 0),
+            'status'     => intval($post['status'] ?? 0),
+            'config'     => $post['config'],
+        ];
+        return Db::name('dev_pay')->insert($insert);
     }
 
 }

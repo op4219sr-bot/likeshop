@@ -2,18 +2,6 @@
 // +----------------------------------------------------------------------
 // | likeshop开源商城系统
 // +----------------------------------------------------------------------
-// | 欢迎阅读学习系统程序代码，建议反馈是我们前进的动力
-// | gitee下载：https://gitee.com/likeshop_gitee
-// | github下载：https://github.com/likeshop-github
-// | 访问官网：https://www.likeshop.cn
-// | 访问社区：https://home.likeshop.cn
-// | 访问手册：http://doc.likeshop.cn
-// | 微信公众号：likeshop技术社区
-// | likeshop系列产品在gitee、github等公开渠道开源版本可免费商用，未经许可不能去除前后端官方版权标识
-// |  likeshop系列产品收费版本务必购买商业授权，购买去版权授权后，方可去除前后端官方版权标识
-// | 禁止对系统程序代码以任何目的，任何形式的再发布
-// | likeshop团队版权所有并拥有最终解释权
-// +----------------------------------------------------------------------
 // | author: likeshop.cn.team
 // +----------------------------------------------------------------------
 
@@ -25,6 +13,7 @@ use app\common\model\Order as CommonOrder;
 use app\common\model\Client_;
 use app\common\server\AliPayServer;
 use app\common\server\ConfigServer;
+use app\common\server\EpayServer;
 use app\common\server\WeChatPayServer;
 use app\common\server\WeChatServer;
 use app\common\logic\PaymentLogic;
@@ -39,16 +28,9 @@ use think\Db;
 class Payment extends ApiBase
 {
 
-    public $like_not_need_login = ['aliNotify', 'notifyMnp', 'notifyOa', 'notifyApp'];
+    public $like_not_need_login = ['aliNotify', 'notifyMnp', 'notifyOa', 'notifyApp', 'epayNotify', 'epayReturn'];
 
 
-    /**
-     * Notes: 预支付
-     * @author 段誉(2021/2/23 14:33)
-     * @throws \think\db\exception\DataNotFoundException
-     * @throws \think\db\exception\ModelNotFoundException
-     * @throws \think\exception\DbException
-     */
     public function prepay()
     {
         $post = $this->request->post();
@@ -66,13 +48,10 @@ class Payment extends ApiBase
                 $order = Db::name('recharge_order')->where(['id' => $post['order_id']])->find();
                 break;
         }
-        //找不到订单
         if (empty($order)) {
             $this->_error('订单不存在');
         }
-        // 变更支付方式
         $order['pay_way'] = $post['pay_way'];
-        //已支付
         if ($order['pay_status'] == Pay::ISPAID) {
             $this->_success('支付成功', ['order_id' => $order['id']], 10000);
         }
@@ -91,13 +70,6 @@ class Payment extends ApiBase
 
 
 
-    /**
-     * Notes: pc端预支付 NATIVE
-     * @author 段誉(2021/3/18 16:03)
-     * @throws \EasyWeChat\Kernel\Exceptions\InvalidArgumentException
-     * @throws \EasyWeChat\Kernel\Exceptions\InvalidConfigException
-     * @throws \GuzzleHttp\Exception\GuzzleException
-     */
     public function pcPrepay()
     {
         $post = $this->request->post();
@@ -106,7 +78,6 @@ class Payment extends ApiBase
 
         $return_msg = ['order_id' => $order['id'], 'order_amount' => $order['order_amount']];
 
-        //找不到订单
         if (empty($order)) {
             $this->_error('订单不存在');
         }
@@ -115,7 +86,6 @@ class Payment extends ApiBase
             $this->_error('订单已关闭');
         }
 
-        //已支付
         if ($order['pay_status'] == Pay::ISPAID) {
             $this->_success('支付成功', $return_msg, 10001);
         }
@@ -140,44 +110,24 @@ class Payment extends ApiBase
     }
 
 
-
-    /**
-     * Notes: 小程序回调
-     * @author 段誉(2021/2/23 14:34)
-     */
     public function notifyMnp()
     {
         $config = WeChatServer::getPayConfig(Client_::mnp);
         return WeChatPayServer::notify($config);
     }
 
-
-    /**
-     * Notes: 公众号回调
-     * @author 段誉(2021/2/23 14:34)
-     */
     public function notifyOa()
     {
         $config = WeChatServer::getPayConfig(Client_::oa);
         return WeChatPayServer::notify($config);
     }
 
-
-    /**
-     * Notes: APP回调
-     * @author 段誉(2021/2/23 14:34)
-     */
     public function notifyApp()
     {
         $config = WeChatServer::getPayConfig(Client_::ios);
         return WeChatPayServer::notify($config);
     }
 
-
-    /**
-     * Notes: 支付宝回调
-     * @author 段誉(2021/3/23 11:37)
-     */
     public function aliNotify()
     {
         $data = $this->request->post();
@@ -190,12 +140,46 @@ class Payment extends ApiBase
     }
 
 
+    /**
+     * 易支付异步通知（GET 回调）
+     */
+    public function epayNotify()
+    {
+        $data = $this->request->get();
+        $result = (new EpayServer())->verifyNotify($data);
+        echo $result === true ? 'success' : 'fail';
+    }
+
 
     /**
-     * Notes:
-     * @author 段誉(2021/3/23 11:36)
-     * @return \think\Model[]
+     * 易支付同步跳回
      */
+    public function epayReturn()
+    {
+        $data = $this->request->get();
+        $domain = request()->domain();
+        try {
+            $config = (new EpayServer())->getOptions();
+            if (!EpayServer::verifySign($data, $config['key'])) {
+                header('Location: ' . $domain);
+                exit;
+            }
+        } catch (\Exception $e) {
+            header('Location: ' . $domain);
+            exit;
+        }
+        $passback = $data['param'] ?? 'order';
+        if ($passback === 'recharge') {
+            header('Location: ' . $domain . '/mobile/pages/user_wallet/user_wallet');
+        } else {
+            $order = Db::name('order')->where(['order_sn' => $data['out_trade_no']])->find();
+            $orderId = $order['id'] ?? 0;
+            header('Location: ' . $domain . '/mobile/pages/order_details/order_details?id=' . $orderId);
+        }
+        exit;
+    }
+
+
     public function payway()
     {
         $params = $this->request->get();
@@ -228,7 +212,16 @@ class Payment extends ApiBase
                 $item['pay_way'] = Pay::ALI_PAY;
             }
 
+            if ($item['code'] == 'epay') {
+                $item['extra'] = '支持微信/支付宝/USDT等多渠道';
+                $item['pay_way'] = Pay::EPAY;
+            }
+
             if (in_array($this->client, [Client_::mnp, Client_::oa]) && $item['code'] == 'alipay') {
+                unset($pay[$k]);
+            }
+            // 易支付在小程序/公众号内不可用（需跳出微信）
+            if (in_array($this->client, [Client_::mnp, Client_::oa]) && $item['code'] == 'epay') {
                 unset($pay[$k]);
             }
             if($params['from'] == 'recharge' && $item['code'] == 'balance') {
@@ -236,13 +229,10 @@ class Payment extends ApiBase
             }
 
         }
-        // 订单自动取消时间
         $cancelTime = ConfigServer::get('trading', 'order_cancel');
         if(empty($cancelTime)) {
-            // 前端检测为0时不显示倒计时
             $cancelTime = 0;
         }else{
-            // 订单创建时间 + 后台设置自动关闭未付款订单时长
             $cancelTime = $order['create_time'] + intval($cancelTime) * 60;
         }
         $data = [
