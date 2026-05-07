@@ -21,6 +21,7 @@ namespace app\common\logic;
 
 use app\common\server\AliPayServer;
 use app\common\server\BalancePayServer;
+use app\common\server\EpayServer;
 use app\common\server\WeChatPayServer;
 use app\common\model\{Client_, Order, Pay, User};
 use think\facade\Env;
@@ -51,7 +52,7 @@ class PaymentLogic extends LogicBase
     {
         return self::$return_code;
     }
-    
+
     /**
      * Notes: 支付
      * @param $from
@@ -104,6 +105,17 @@ class PaymentLogic extends LogicBase
                     self::$return_code = 20001;//特殊状态码,用于前端判断
                 }else{
                     self::$error = $balancePay->getError();
+                }
+                break;
+            case Pay::EPAY:
+                $epay = new EpayServer();
+                $res = $epay->pay($from, $order, $order_source);
+                if (false === $res) {
+                    self::$error = $epay->getError();
+                } else {
+                    // 复用 alipay 的状态码 10001：返回 HTML 自动提交表单
+                    // 前端 alipay() 处理已能直接渲染并跳转
+                    self::$return_code = 10001;
                 }
                 break;
             default:
@@ -173,6 +185,15 @@ class PaymentLogic extends LogicBase
                     return false;
                 }
                 self::$return_code = 20001;//特殊状态码,用于前端判断
+                break;
+            case Pay::EPAY:
+                $epay = new EpayServer();
+                $res = $epay->pay('order', $order, $order_source);
+                if (false === $res) {
+                    self::$error = $epay->getError();
+                    return false;
+                }
+                self::$return_code = 20001;//特殊状态码，用于前端判断（同支付宝：HTML 表单）
                 break;
             default:
                 self::$error = '无效的支付方式';
