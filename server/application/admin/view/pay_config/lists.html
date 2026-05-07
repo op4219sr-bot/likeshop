@@ -12,6 +12,7 @@
                         <p>*商城支付方式设置，不同应用场景支持的支付方式不同。</p>
                         <p>*请前往微信和支付宝平台申请对应的支付端口。</p>
                         <p>*微信支付的appid，appsecret从微信功能模块获取</p>
+                        <p>*易支付（彩虹易支付）需要配置网关地址、商户ID(PID)、商户密钥(KEY)；小程序/公众号场景下不可用。</p>
                     </div>
                 </div>
             </div>
@@ -39,16 +40,15 @@
 <script>
     layui.config({
         version:"{$front_version}",
-        base: '/static/plug/layui-admin/dist/layuiadmin/' //静态资源所在路径
+        base: '/static/plug/layui-admin/dist/layuiadmin/'
     }).extend({
-        index: 'lib/index' //主入口模块
+        index: 'lib/index'
     }).use(['index','table','like','form'], function(){
         var $ = layui.$
             ,form = layui.form
             ,table = layui.table
             ,like = layui.like
 
-        //图片放大
         $(document).on('click', '.image-show', function () {
             var src = $(this).attr('src');
             like.showImg(src, 400);
@@ -76,7 +76,6 @@
                 };
             }
             ,done: function(res, curr, count){
-                // 解决操作栏因为内容过多换行问题
                 $(".layui-table-main tr").each(function (index, val) {
                     $($(".layui-table-fixed-l .layui-table-body tbody tr")[index]).height($(val).height());
                     $($(".layui-table-fixed-r .layui-table-body tbody tr")[index]).height($(val).height());
@@ -94,20 +93,21 @@
                     edit_page = 'editBalance';
                 }else if (code == 'wechat') {
                     edit_page = 'editWechat';
-                }else if (code　==　'alipay') {
+                }else if (code == 'alipay') {
                     edit_page = 'editAlipay';
+                }else if (code == 'epay') {
+                    edit_page = 'editEpay';
                 }
-                
+
                 layer.open({
                     type: 2
                     ,title: '编辑'+name
                     ,content: '{:url("pay_config/'+edit_page+'")}?name='+name
                     ,area: ['90%', '90%']
                     ,btn: ['确定', '取消']
-                    ,yes: function(index, layero)　{
+                    ,yes: function(index, layero) {
                         var iframeWindow = window['layui-layer-iframe'+ index]
                             ,submit = layero.find('iframe').contents().find('#pay_config-submit-edit');
-                        //监听提交
                         iframeWindow.layui.form.on('submit(pay_config-submit-edit)', function(data){
                             var field = data.field;
                             like.ajax({
