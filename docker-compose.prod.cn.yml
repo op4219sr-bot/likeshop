@@ -1,0 +1,84 @@
+version: '3'
+
+# 中国大陆服务器专用:镜像从阿里云 ACR 拉取,避免 GHCR / Docker Hub 不稳定
+#
+# 使用前:
+#   1. 为 docker daemon 配置国内镜像加速(解决 mysql/redis 这些从 Docker Hub 拉):
+#      sudo mkdir -p /etc/docker
+#      sudo tee /etc/docker/daemon.json <<'EOF'
+#      {
+#        "registry-mirrors": [
+#          "https://docker.mirrors.ustc.edu.cn",
+#          "https://hub-mirror.c.163.com",
+#          "https://mirror.baidubce.com"
+#        ]
+#      }
+#      EOF
+#      sudo systemctl restart docker
+#
+#   2. 设置环境变量 LIKESHOP_IMAGE 指向你的阿里云镜像,或者直接在下面 image: 那一行改成你的地址:
+#      LIKESHOP_IMAGE=registry.cn-hangzhou.aliyuncs.com/你的命名空间/likeshop:latest \
+#        docker-compose -f docker-compose.prod.cn.yml up -d
+#
+#   3. 镜像需要访问权限:
+#      - 公开镜像:任何服务器都能拉取
+#      - 私有镜像:需要先 docker login 你的 ACR registry
+#
+# 默认值示例:registry.cn-hangzhou.aliyuncs.com/op4219sr-bot/likeshop:latest
+# 你使用前请改成自己的区域 + 命名空间
+
+services:
+  app:
+    image: ${LIKESHOP_IMAGE:-registry.cn-hangzhou.aliyuncs.com/op4219sr-bot/likeshop:latest}
+    container_name: likeshop-app
+    restart: always
+    depends_on:
+      - mysql
+      - redis
+    environment:
+      DB_HOST: mysql
+      DB_PORT: 3306
+      DB_USER: likeshop
+      DB_PASSWORD: likeshop123
+      DB_NAME: likeshop
+      DB_PREFIX: ls_
+      ADMIN_USER: admin
+      ADMIN_PASSWORD: "123456"
+      IMPORT_DEMO: "yes"
+      APP_DEBUG: "false"
+    volumes:
+      - likeshop_runtime:/server/runtime
+      - likeshop_uploads:/server/public/uploads
+      - likeshop_config:/server/config
+    ports:
+      - "80:80"
+
+  mysql:
+    image: mysql:5.7.29
+    container_name: likeshop-mysql
+    restart: always
+    environment:
+      MYSQL_ROOT_PASSWORD: rootpass
+      MYSQL_DATABASE: likeshop
+      MYSQL_USER: likeshop
+      MYSQL_PASSWORD: likeshop123
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_unicode_ci
+      - --sql-mode=STRICT_TRANS_TABLES,ERROR_FOR_DIVISION_BY_ZERO,NO_AUTO_CREATE_USER,NO_ENGINE_SUBSTITUTION
+    volumes:
+      - likeshop_mysql:/var/lib/mysql
+
+  redis:
+    image: redis:6-alpine
+    container_name: likeshop-redis
+    restart: always
+    volumes:
+      - likeshop_redis:/data
+
+volumes:
+  likeshop_mysql:
+  likeshop_redis:
+  likeshop_runtime:
+  likeshop_uploads:
+  likeshop_config:
