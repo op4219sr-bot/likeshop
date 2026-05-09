@@ -1,11 +1,8 @@
-FROM php:7.2-fpm-buster
+FROM php:7.4-fpm-bullseye
 
 ENV DEBIAN_FRONTEND=noninteractive
 
-# 系统依赖 + nginx + supervisor
-RUN sed -i 's|deb.debian.org|archive.debian.org|g; s|security.debian.org|archive.debian.org/debian-security|g; /buster-updates/d' /etc/apt/sources.list \
-    && echo 'Acquire::Check-Valid-Until "false";' > /etc/apt/apt.conf.d/99no-check-valid \
-    && apt-get update \
+RUN apt-get update \
     && apt-get install -y --no-install-recommends \
         nginx \
         supervisor \
@@ -23,7 +20,7 @@ RUN sed -i 's|deb.debian.org|archive.debian.org|g; s|security.debian.org|archive
         unzip \
         curl \
         ca-certificates \
-    && docker-php-ext-configure gd --with-freetype-dir=/usr/include --with-jpeg-dir=/usr/include \
+    && docker-php-ext-configure gd --with-freetype --with-jpeg \
     && docker-php-ext-install -j"$(nproc)" \
         pdo \
         pdo_mysql \
@@ -40,7 +37,6 @@ RUN sed -i 's|deb.debian.org|archive.debian.org|g; s|security.debian.org|archive
     && rm -rf /var/lib/apt/lists/* \
     && rm -rf /etc/nginx/sites-enabled/default
 
-# PHP 配置
 RUN { \
         echo 'memory_limit = 256M'; \
         echo 'upload_max_filesize = 32M'; \
@@ -50,17 +46,14 @@ RUN { \
         echo 'short_open_tag = On'; \
     } > /usr/local/etc/php/conf.d/likeshop.ini
 
-# 项目代码
 WORKDIR /server
 COPY server/ /server/
 
-# 写死可写目录权限
 RUN mkdir -p /server/runtime /server/public/uploads /server/config \
     && chown -R www-data:www-data /server \
     && chmod -R 0755 /server \
     && chmod -R 0775 /server/runtime /server/public/uploads /server/config
 
-# nginx + supervisor 配置 + entrypoint
 COPY docker/image/nginx.conf       /etc/nginx/nginx.conf
 COPY docker/image/site.conf        /etc/nginx/conf.d/likeshop.conf
 COPY docker/image/supervisord.conf /etc/supervisor/conf.d/supervisord.conf
