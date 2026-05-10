@@ -13,8 +13,13 @@ use think\Db;
 class PayConfigLogic
 {
 
+    /**
+     * 列表页用的支付方式列表.
+     * 每次进入时确保易支付那一行存在(给老库自动补齐,新装库由 like.sql 已经种好).
+     */
     public static function lists()
     {
+        self::ensureEpayRow();
         $payModel = new Pay();
         $count = $payModel->count();
         $lists = $payModel->order('sort')->select();
@@ -22,9 +27,32 @@ class PayConfigLogic
         return ['list' => $lists, 'count' => $count];
     }
 
+    /**
+     * 老库升级:若 ls_dev_pay 没有 epay 行就插一条占位行.
+     */
+    private static function ensureEpayRow()
+    {
+        $exists = Db::name('dev_pay')->where(['code' => 'epay'])->find();
+        if ($exists) {
+            return;
+        }
+        Db::name('dev_pay')->insert([
+            'code'       => 'epay',
+            'name'       => '易支付',
+            'short_name' => '易支付',
+            'icon'       => '',
+            'sort'       => 4,
+            'status'     => 0,
+            'config'     => '{}',
+        ]);
+    }
+
 
     public static function info($pay_code)
     {
+        if ($pay_code === 'epay') {
+            self::ensureEpayRow();
+        }
         $payModel = new Pay();
         $result = $payModel->where(['code' => $pay_code])->append(['status_text'])->find();
         return $result;
@@ -67,7 +95,7 @@ class PayConfigLogic
 
 
     /**
-     * 易支付配置（首次编辑时若 pay 表无对应行则自动写入）
+     * 易支付配置(首次编辑时若 pay 表无对应行则自动写入)
      */
     public static function editEpay($post)
     {
@@ -80,21 +108,9 @@ class PayConfigLogic
         ];
         $post['config'] = json_encode($config, JSON_UNESCAPED_UNICODE);
 
+        self::ensureEpayRow();
         $payModel = new Pay();
-        $exists = Db::name('dev_pay')->where(['code' => 'epay'])->find();
-        if ($exists) {
-            return $payModel->allowField(true)->save($post, ['code' => 'epay']);
-        }
-        $insert = [
-            'code'       => 'epay',
-            'name'       => $post['name'] ?? '易支付',
-            'short_name' => $post['short_name'] ?? '易支付',
-            'icon'       => $post['icon'] ?? '',
-            'sort'       => intval($post['sort'] ?? 0),
-            'status'     => intval($post['status'] ?? 0),
-            'config'     => $post['config'],
-        ];
-        return Db::name('dev_pay')->insert($insert);
+        return $payModel->allowField(true)->save($post, ['code' => 'epay']);
     }
 
 }
