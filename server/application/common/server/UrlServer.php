@@ -59,6 +59,14 @@ class UrlServer
             
             $protocol = is_https() ? 'https://' : 'http://';
             $file_url = config('project.file_domain');
+            // 未配置 file_domain 时回退到当前请求的 host(支持任意 host/IP/port 访问)
+            if (empty($file_url) && isset($_SERVER['HTTP_HOST'])) {
+                $file_url = $_SERVER['HTTP_HOST'];
+            }
+            // 仍然为空就返回相对 URL,避免对空字符串做下标访问导致 PHP warning/500
+            if ($file_url === '') {
+                return $uri;
+            }
             if ($file_url[strlen($file_url) - 1] == '/') {
                 $file_url = substr($file_url,0,strlen($file_url)-1);
                 
@@ -74,7 +82,7 @@ class UrlServer
 
             $config = ConfigServer::get('storage_engine',$engine);
             $domain = isset($config['domain']) ? $config['domain'] : 'http://';
-            if ($domain[strlen($domain) - 1] == '/') {
+            if ($domain !== '' && $domain[strlen($domain) - 1] == '/') {
                 $domain = substr($domain,0,strlen($domain)-1);
             }
             return $domain . $uri;
