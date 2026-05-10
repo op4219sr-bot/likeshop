@@ -1,5 +1,5 @@
 #!/bin/bash
-# All-in-one entrypoint: 启动临时 mariadb 初始化 → 跑安装 → 关掉 → 交给 supervisord 接管
+# All-in-one entrypoint: 用 mariadbd --bootstrap 模式做首次初始化,然后交给 supervisord
 set -e
 
 : "${MYSQL_ROOT_PASSWORD:=root}"
@@ -20,37 +20,19 @@ MYSQL_DATADIR=/var/lib/mysql
 REDIS_DATADIR=/var/lib/redis
 LOCK_FILE=/server/config/install.lock
 ENV_FILE=/server/.env
-SETUP_SOCK=/run/mysqld/setup.sock
 
 mkdir -p /run/mysqld "${REDIS_DATADIR}"
 chown -R mysql:mysql /run/mysqld "${MYSQL_DATADIR}"
 chown -R redis:redis "${REDIS_DATADIR}"
 
-# === 1. 初始化 mariadb 数据目录(仅首次) ===
+# === 1. 首次初始化数据目录 + 用 bootstrap 模式建用户/库(无 daemon 启停) ===
 if [ ! -d "${MYSQL_DATADIR}/mysql" ]; then
     echo "[entrypoint-aio] initializing MariaDB datadir..."
     mariadb-install-db --user=mysql --datadir="${MYSQL_DATADIR}" --auth-root-authentication-method=normal >/dev/null
-fi
 
-# === 2. 启动临时 mariadb (仅 socket,不开网络端口) —— 用来初始化账号 + 跑安装 ===
-echo "[entrypoint-aio] booting temporary MariaDB for setup..."
-mariadbd --user=mysql --datadir="${MYSQL_DATADIR}" --socket="${SETUP_SOCK}" --skip-networking --skip-grant-tables &
-TMP_PID=$!
-
-for i in $(seq 1 60); do
-    if mysqladmin -S "${SETUP_SOCK}" -u root ping --silent 2>/dev/null; then
-        break
-    fi
-    if [ "$i" = "60" ]; then
-        echo "[entrypoint-aio] temp MariaDB failed to come up" >&2
-        exit 1
-    fi
-    sleep 1
-done
-
-echo "[entrypoint-aio] applying users / db (idempotent)..."
-mysql -S "${SETUP_SOCK}" -u root <<SQL || true
-FLUSH PRIVILEGES;
+    echo "[entrypoint-aio] bootstrapping users + database..."
+    mariadbd --user=mysql --datadir="${MYSQL_DATADIR}" --bootstrap <<SQL
+USE mysql;
 ALTER USER 'root'@'localhost' IDENTIFIED BY '${MYSQL_ROOT_PASSWORD}';
 CREATE USER IF NOT EXISTS 'root'@'127.0.0.1' IDENTIFIED BY '${MYSQL_ROOT_PASSWORD}';
 GRANT ALL ON *.* TO 'root'@'127.0.0.1' WITH GRANT OPTION;
@@ -59,30 +41,10 @@ CREATE USER IF NOT EXISTS '${DB_USER}'@'127.0.0.1' IDENTIFIED BY '${DB_PASSWORD}
 GRANT ALL ON \`${DB_NAME}\`.* TO '${DB_USER}'@'127.0.0.1';
 FLUSH PRIVILEGES;
 SQL
+    echo "[entrypoint-aio] bootstrap done"
+fi
 
-# 关掉临时 mariadb (准备重启为启用网络 + grant tables 模式)
-mysqladmin -S "${SETUP_SOCK}" -u root shutdown 2>/dev/null || true
-wait "${TMP_PID}" 2>/dev/null || true
-rm -f "${SETUP_SOCK}"
-
-# === 3. 启动启用 grant tables + 127.0.0.1 网络的 mariadb,让安装脚本能连 TCP ===
-echo "[entrypoint-aio] booting MariaDB with networking for install..."
-mariadbd --user=mysql --datadir="${MYSQL_DATADIR}" --bind-address=127.0.0.1 --skip-name-resolve &
-TCP_PID=$!
-
-for i in $(seq 1 60); do
-    if mysqladmin -h 127.0.0.1 -u root -p"${MYSQL_ROOT_PASSWORD}" ping --silent 2>/dev/null; then
-        echo "[entrypoint-aio] MariaDB ready on 127.0.0.1:3306"
-        break
-    fi
-    if [ "$i" = "60" ]; then
-        echo "[entrypoint-aio] MariaDB (TCP) failed to come up" >&2
-        exit 1
-    fi
-    sleep 1
-done
-
-# === 4. 写 .env ===
+# === 2. 写 .env ===
 cat > "${ENV_FILE}" <<EOF
 [app]
 app_debug = ${APP_DEBUG}
@@ -101,23 +63,47 @@ file_domain =
 EOF
 chown www-data:www-data "${ENV_FILE}"
 
-# === 5. 首次启动跑安装 ===
+# === 3. install.lock 不存在则临时拉起 mariadb 跑 likeshop 安装 ===
 if [ ! -f "${LOCK_FILE}" ]; then
-    echo "[entrypoint-aio] running auto-install..."
-    php /usr/local/bin/auto_install.php
+    echo "[entrypoint-aio] running auto-install (booting MariaDB temporarily)..."
+    mariadbd --user=mysql --datadir="${MYSQL_DATADIR}" --bind-address=127.0.0.1 --skip-name-resolve &
+    INSTALL_PID=$!
+
+    READY=0
+    for i in $(seq 1 60); do
+        if mysqladmin -h 127.0.0.1 -u root -p"${MYSQL_ROOT_PASSWORD}" ping --silent 2>/dev/null; then
+            READY=1
+            echo "[entrypoint-aio] MariaDB ready for install"
+            break
+        fi
+        sleep 1
+    done
+    if [ "${READY}" != "1" ]; then
+        echo "[entrypoint-aio] MariaDB failed to come up for install" >&2
+        # 不直接 exit,让 supervisord 接手,用户能进容器调试
+    else
+        php /usr/local/bin/auto_install.php || echo "[entrypoint-aio] auto-install failed (see logs above)"
+    fi
+
+    # 优雅 shutdown,带超时,卡住就硬杀
+    mysqladmin -h 127.0.0.1 -u root -p"${MYSQL_ROOT_PASSWORD}" shutdown 2>/dev/null || true
+    for i in $(seq 1 30); do
+        if ! kill -0 "${INSTALL_PID}" 2>/dev/null; then break; fi
+        sleep 1
+    done
+    if kill -0 "${INSTALL_PID}" 2>/dev/null; then
+        echo "[entrypoint-aio] forcing MariaDB shutdown"
+        kill "${INSTALL_PID}" 2>/dev/null || true
+        sleep 2
+        kill -9 "${INSTALL_PID}" 2>/dev/null || true
+    fi
+
     if [ -f "${LOCK_FILE}" ]; then
         echo "[entrypoint-aio] auto-install OK; admin = ${ADMIN_USER} / ${ADMIN_PASSWORD}"
-    else
-        echo "[entrypoint-aio] auto-install failed" >&2
-        # 不 exit —— 让 supervisord 照起,用户能进容器查日志
     fi
 else
     echo "[entrypoint-aio] install.lock present, skipping install"
 fi
-
-# === 6. 关掉临时 mariadb,交给 supervisord ===
-mysqladmin -h 127.0.0.1 -u root -p"${MYSQL_ROOT_PASSWORD}" shutdown 2>/dev/null || true
-wait "${TCP_PID}" 2>/dev/null || true
 
 chown -R www-data:www-data /server/runtime /server/public/uploads /server/config 2>/dev/null || true
 
