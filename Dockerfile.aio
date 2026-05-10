@@ -1,0 +1,79 @@
+# All-in-one image: PHP-FPM + Nginx + MariaDB + Redis in a single container.
+# For 「docker run 一行启动」场景. 生产环境仍建议用分离的 docker-compose.prod.yml.
+# 镜像 tag 后缀 aio-,例如 ghcr.io/op4219sr-bot/likeshop:aio-latest
+
+FROM php:7.4-fpm-bullseye
+
+ENV DEBIAN_FRONTEND=noninteractive
+
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends \
+        nginx \
+        supervisor \
+        default-mysql-server \
+        default-mysql-client \
+        redis-server \
+        libpng-dev \
+        libjpeg62-turbo-dev \
+        libfreetype6-dev \
+        libzip-dev \
+        libonig-dev \
+        libxml2-dev \
+        libcurl4-openssl-dev \
+        libicu-dev \
+        libssl-dev \
+        zlib1g-dev \
+        unzip \
+        curl \
+        ca-certificates \
+    && docker-php-ext-configure gd --with-freetype --with-jpeg \
+    && docker-php-ext-install -j"$(nproc)" \
+        pdo \
+        pdo_mysql \
+        mysqli \
+        gd \
+        zip \
+        mbstring \
+        bcmath \
+        curl \
+        intl \
+        opcache \
+        dom \
+        iconv \
+    && rm -rf /var/lib/apt/lists/* \
+    && rm -rf /etc/nginx/sites-enabled/default \
+    && mkdir -p /run/mysqld /var/lib/mysql /var/lib/redis \
+    && chown -R mysql:mysql /run/mysqld /var/lib/mysql \
+    && chown -R redis:redis /var/lib/redis
+
+RUN { \
+        echo 'memory_limit = 256M'; \
+        echo 'upload_max_filesize = 32M'; \
+        echo 'post_max_size = 32M'; \
+        echo 'max_execution_time = 120'; \
+        echo 'date.timezone = Asia/Shanghai'; \
+        echo 'short_open_tag = On'; \
+    } > /usr/local/etc/php/conf.d/likeshop.ini
+
+WORKDIR /server
+COPY server/ /server/
+
+RUN mkdir -p /server/runtime /server/public/uploads /server/config \
+    && chown -R www-data:www-data /server \
+    && chmod -R 0755 /server \
+    && chmod -R 0775 /server/runtime /server/public/uploads /server/config
+
+COPY docker/image/nginx.conf            /etc/nginx/nginx.conf
+COPY docker/image/site.conf             /etc/nginx/conf.d/likeshop.conf
+COPY docker/image/supervisord-aio.conf  /etc/supervisor/conf.d/supervisord.conf
+COPY docker/image/auto_install.php      /usr/local/bin/auto_install.php
+COPY docker/image/entrypoint-aio.sh     /usr/local/bin/entrypoint-aio.sh
+RUN chmod +x /usr/local/bin/entrypoint-aio.sh
+
+# 数据/上传作为存储卷,指向外部 -v 可保证重启不丢
+# (不 -v 也能跑,但 docker rm 后会丢)
+VOLUME ["/var/lib/mysql", "/var/lib/redis", "/server/public/uploads", "/server/runtime", "/server/config"]
+
+EXPOSE 80
+ENTRYPOINT ["/usr/local/bin/entrypoint-aio.sh"]
+CMD ["/usr/bin/supervisord", "-n", "-c", "/etc/supervisor/conf.d/supervisord.conf"]
