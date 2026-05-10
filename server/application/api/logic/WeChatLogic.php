@@ -42,6 +42,10 @@ class WeChatLogic
     public static function jsConfig($url)
     {
         $config = WeChatServer::getOaConfig();
+        // 未配置公众号 appid/secret 时直接返回空配置,不抛错(避免 H5 在微信浏览器里弹"公众号配置出错"窗)
+        if (empty($config['app_id']) || empty($config['secret'])) {
+            return data_success('', []);
+        }
         $app = Factory::officialAccount($config);
         $url = urldecode($url);
         $app->jssdk->setUrl($url);
@@ -76,6 +80,10 @@ class WeChatLogic
         }
         //微信配置
         $config = WeChatServer::getOaConfig();
+        // 未配置公众号 appid/secret 时直接静默退出,避免 EasyWeChat 报错
+        if (empty($config['app_id']) || empty($config['secret'])) {
+            return;
+        }
         $app = Factory::officialAccount($config);
 
         $app->server->push(function ($message) {
