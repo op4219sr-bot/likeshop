@@ -42,7 +42,11 @@ RUN apt-get update \
         iconv \
     && rm -rf /var/lib/apt/lists/* \
     && rm -rf /etc/nginx/sites-enabled/default \
-    && mkdir -p /run/mysqld /var/lib/mysql /var/lib/redis \
+    # Debian 的 mariadb-server postinst 会自动跑 mariadb-install-db,在镜像层里写入 /var/lib/mysql.
+    # 必须清掉,否则容器启动时 entrypoint 看到 datadir 已存在,跳过 bootstrap,root 用户没有密码.
+    && rm -rf /var/lib/mysql && mkdir -p /var/lib/mysql \
+    && rm -rf /var/lib/redis && mkdir -p /var/lib/redis \
+    && mkdir -p /run/mysqld \
     && chown -R mysql:mysql /run/mysqld /var/lib/mysql \
     && chown -R redis:redis /var/lib/redis
 
