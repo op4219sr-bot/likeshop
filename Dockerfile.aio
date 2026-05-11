@@ -59,6 +59,8 @@ RUN { \
         echo 'short_open_tag = On'; \
     } > /usr/local/etc/php/conf.d/likeshop.ini
 
+COPY docker/image/php-opcache.ini       /usr/local/etc/php/conf.d/likeshop-opcache.ini
+
 WORKDIR /server
 COPY server/ /server/
 
