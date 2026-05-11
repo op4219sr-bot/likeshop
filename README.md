@@ -43,7 +43,7 @@ ghcr.io/op4219sr-bot/likeshop:aio-latest
 ### ⚠️注意
 1.首次启动需要 60-90 秒（初始化数据库 + 跑安装脚本），如出现无法访问请稍候后再试。<br>
 2.默认管理员账号 `admin`，默认密码 `123456`，**登录后请立即修改**。<br>
-3.默认 `MYSQL_ROOT_PASSWORD=root`，**生产环境务必改成强密码**。<br>
+3.默认 `MYSQL_ROOT_PASSWORD=root`，**生产环境务必改成强密码**（详见下面「🔒安全建议」一节）。<br>
 4.单容器把数据库塞进容器内，方便快速体验，生产环境建议至少挂 `/var/lib/mysql` 和 `/server/public/uploads` 两个 volume。<br>
 5.不熟悉 docker 请勿用于生产环境，可能造成数据丢失等问题。
 
@@ -51,6 +51,86 @@ ghcr.io/op4219sr-bot/likeshop:aio-latest
 PC端管理后台：http://127.0.0.1:20208/admin/account/login
 <br>PC端前台：http://127.0.0.1:20208/pc/
 <br>手机端前台：http://127.0.0.1:20208/mobile/
+
+---
+
+## 🔒 安全建议（上线前务必看一下）
+
+### 默认密码现在会不会被攻破？
+
+**结论：默认 `MYSQL_ROOT_PASSWORD=root` 在本镜像里不会被外网直接攻破**，但仍强烈建议改。
+
+镜像内部的 MariaDB 配置为 `--bind-address=127.0.0.1`，**只监听容器内部回环地址**，不接受任何来自外网/宿主机的连接。`docker run` 也只映射了 `-p 20208:80`（HTTP 端口），**没有暴露 3306 数据库端口**。三道防线：
+
+| 防线 | 内容 |
+|---|---|
+| ① 容器内 MariaDB | `bind-address=127.0.0.1`，不接受非容器内连接 |
+| ② Docker 端口映射 | 只暴露 80 端口，3306 没映射 |
+| ③ 宿主机防火墙 | 默认 3306 不在云服务器安全组里 |
+
+所以外网攻击者**根本接触不到** MySQL，再弱的密码也穷举不了。
+
+但**仍然建议改**，原因：
+
+- 万一以后要调试数据库需要把端口暴露出来，忘记改密码就裸奔
+- 如果商城代码出现 SQL 注入漏洞，弱密码会让攻击者更容易提权
+- 上线产品时审计 / 等保 / 客户检查时 `root/root` 会被直接打回
+
+### 改密码方式 A：**新部署直接指定**（推荐，最简单）
+
+启动时把 `MYSQL_ROOT_PASSWORD` 改成你的强密码：
+
+```bash
+docker rm -fv likeshop
+docker volume prune -f
+docker run -d --name likeshop -p 20208:80 \
+  -e MYSQL_ROOT_PASSWORD='你的强密码请改这里' \
+  ghcr.io/op4219sr-bot/likeshop:aio-latest
+```
+
+> ⚠️ 密码里如果有 `$` `!` `\` `'` 等特殊字符，记得用**单引号**包起来，不然 bash 会预先解释。
+
+### 改密码方式 B：**已经在用的容器，原地改**（不丢数据）
+
+把下面三条命令里的 `NewStrongPassword` 都换成**同一个**新密码，依次跑：
+
+```bash
+# 1. 改 MySQL 里 root 用户的密码
+docker exec likeshop mysql -h 127.0.0.1 -uroot -proot -e "
+ALTER USER 'root'@'localhost' IDENTIFIED BY 'NewStrongPassword';
+ALTER USER 'root'@'127.0.0.1' IDENTIFIED BY 'NewStrongPassword';
+FLUSH PRIVILEGES;
+"
+
+# 2. 改容器里的 /server/.env，让 PHP 用新密码连库
+docker exec likeshop sed -i "s/^password = root\$/password = NewStrongPassword/" /server/.env
+
+# 3. 重启容器（让 php-fpm 重新读 .env）
+docker restart likeshop
+```
+
+改完用 `docker exec likeshop cat /server/.env` 确认 `[database]` 段的 `password = ` 后面是新密码。
+
+### 强密码生成
+
+```bash
+openssl rand -base64 24
+```
+
+跑一下会出来类似 `kT4w8jR2vXpQ9mN3yL6sZ7bU5eH1iA8c` 这种 24 字符串，可直接当密码用。
+
+### 其他上线前安全清单
+
+| # | 建议 | 怎么做 |
+|---|---|---|
+| 1 | **改管理员密码** | 后台登录后右上角 `admin` → 个人 → 修改密码（默认 `123456` 太弱） |
+| 2 | **改对外端口** | 把 `-p 20208:80` 换成 `-p <随机高位端口>:80`，避免被扫描器一眼盯上 |
+| 3 | **配置 HTTPS** | 有域名的话用 nginx 反向代理 + Let's Encrypt 证书套一层 HTTPS |
+| 4 | **云安全组最小开放** | 腾讯云/阿里云 → 安全组入站规则 → 只放行实际需要的端口（80/443/SSH） |
+| 5 | **fail2ban / 登录限速** | 防止有人对管理后台暴力破解 |
+| 6 | **定期备份** | `docker exec likeshop mysqldump -uroot -p<密码> likeshop > backup_$(date +%F).sql` |
+
+---
 
 ## 💳易支付（彩虹易支付）配置 — 本仓库新增功能
 
