@@ -1,0 +1,169 @@
+{layout name="layout1" /}
+<style>
+    .theme-presets { display: flex; flex-wrap: wrap; gap: 16px; padding: 8px 0; }
+    .theme-card {
+        border: 2px solid #e6e6e6; border-radius: 8px; padding: 16px;
+        width: 240px; cursor: pointer; transition: all .2s;
+        background: #fff; position: relative;
+    }
+    .theme-card:hover { border-color: #1E9FFF; transform: translateY(-2px); box-shadow: 0 4px 12px rgba(0,0,0,.08); }
+    .theme-card.active { border-color: #FF5722; background: #fff8f6; }
+    .theme-card.active::after {
+        content: '✓'; position: absolute; top: 6px; right: 10px;
+        color: #FF5722; font-size: 18px; font-weight: bold;
+    }
+    .theme-swatch { display: flex; height: 36px; border-radius: 4px; overflow: hidden; margin-bottom: 10px; }
+    .theme-swatch-primary { flex: 2; }
+    .theme-swatch-secondary { flex: 1; }
+    .theme-name { font-weight: 600; margin-bottom: 4px; color: #333; }
+    .theme-desc { font-size: 12px; color: #999; line-height: 1.5; }
+    .custom-color-block { padding: 12px 0; }
+    .custom-color-block input[type=color] { vertical-align: middle; width: 60px; height: 32px; border: 1px solid #ddd; border-radius: 4px; cursor: pointer; padding: 0; }
+    .custom-color-block .color-hex { display: inline-block; margin-left: 8px; vertical-align: middle; font-family: monospace; }
+</style>
+
+<div class="layui-fluid">
+  <div class="layui-card">
+    <div class="layui-card-body">
+      <div class="layui-collapse like-layui-collapse" lay-accordion="" style="border:1px dashed #c4c4c4">
+        <div class="layui-colla-item">
+          <h2 class="layui-colla-title like-layui-colla-title" style="background-color: #fff">操作提示</h2>
+          <div class="layui-colla-content layui-show">
+            <p>*选择一套预设主题,或者选「自定义」自己挑颜色。</p>
+            <p>*保存后,H5 端商城刷新即可看到效果;新建会话/未缓存的用户立即生效。</p>
+            <p>*药品零售主题:适合做医药、保健品、医疗器械的店铺,清新的医疗绿调。</p>
+            <p>*主题只影响主色和辅助色,不替换布局/组件结构(下个版本会做布局主题)。</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="layui-form layui-card-header layuiadmin-card-header-auto">
+      <h1 class="site-h1">主题设置</h1>
+    </div>
+
+    <div class="layui-card-body">
+      <form class="layui-form" lay-filter="theme-form">
+
+        <div class="layui-form-item">
+          <fieldset class="layui-elem-field layui-field-title">
+            <legend>选择预设主题</legend>
+          </fieldset>
+        </div>
+
+        <div class="layui-form-item">
+          <div class="theme-presets" id="presets-grid">
+            {volist name="presets" id="p" key="k"}
+              <label class="theme-card {if condition="$config.preset eq $k"}active{/if}" data-preset="{$k}">
+                <input type="radio" name="preset" value="{$k}" style="display:none" {if condition="$config.preset eq $k"}checked{/if}>
+                <div class="theme-swatch">
+                  <div class="theme-swatch-primary" style="background:{$p.primary}"></div>
+                  <div class="theme-swatch-secondary" style="background:{$p.secondary}"></div>
+                </div>
+                <div class="theme-name">{$p.name}</div>
+                <div class="theme-desc">{$p.desc}</div>
+              </label>
+            {/volist}
+            <label class="theme-card {if condition="$config.preset eq 'custom'"}active{/if}" data-preset="custom">
+              <input type="radio" name="preset" value="custom" style="display:none" {if condition="$config.preset eq 'custom'"}checked{/if}>
+              <div class="theme-swatch">
+                <div class="theme-swatch-primary" style="background:#999"></div>
+                <div class="theme-swatch-secondary" style="background:#ccc"></div>
+              </div>
+              <div class="theme-name">🎨 自定义</div>
+              <div class="theme-desc">自己挑主色和辅助色,适合品牌已有 VI 配色规范</div>
+            </label>
+          </div>
+        </div>
+
+        <div class="layui-form-item custom-color-block" id="custom-color-block" style="display:{if condition="$config.preset eq 'custom'"}block{else /}none{/if}">
+          <label class="layui-form-label">主色:</label>
+          <div class="layui-input-inline">
+            <input type="color" id="primary_color_picker" value="{$config.primary_color}">
+            <input type="text" name="primary_color" id="primary_color_text" class="layui-input color-hex" value="{$config.primary_color}" style="width:100px;display:inline-block;" maxlength="7">
+          </div>
+          <label class="layui-form-label">辅助色:</label>
+          <div class="layui-input-inline">
+            <input type="color" id="secondary_color_picker" value="{$config.secondary_color}">
+            <input type="text" name="secondary_color" id="secondary_color_text" class="layui-input color-hex" value="{$config.secondary_color}" style="width:100px;display:inline-block;" maxlength="7">
+          </div>
+        </div>
+
+        <div class="layui-form-item">
+          <fieldset class="layui-elem-field layui-field-title">
+            <legend>应用范围</legend>
+          </fieldset>
+        </div>
+
+        <div class="layui-form-item">
+          <label class="layui-form-label">H5 商城:</label>
+          <div class="layui-input-block">
+            <input type="radio" name="apply_h5" value="1" title="启用" {if condition="$config.apply_h5 eq 1"}checked{/if}>
+            <input type="radio" name="apply_h5" value="0" title="不启用(用原始 LikeShop 红)" {if condition="$config.apply_h5 eq 0"}checked{/if}>
+          </div>
+        </div>
+
+        <div class="layui-form-item">
+          <label class="layui-form-label">后台 UI:</label>
+          <div class="layui-input-block">
+            <input type="radio" name="apply_admin" value="1" title="启用(顶部导航变色)" {if condition="$config.apply_admin eq 1"}checked{/if}>
+            <input type="radio" name="apply_admin" value="0" title="不启用" {if condition="$config.apply_admin eq 0"}checked{/if}>
+          </div>
+        </div>
+
+        <div class="layui-form-item">
+          <div class="layui-input-block">
+            <button class="layui-btn {$view_theme_color}" lay-submit lay-filter="theme-submit">保存设置</button>
+          </div>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<script>
+  layui.config({
+    version: "{$front_version}",
+    base: '/static/plug/layui-admin/dist/layuiadmin/'
+  }).extend({
+    index: 'lib/index'
+  }).use(['index', 'form', 'like'], function() {
+    var $ = layui.$,
+        form = layui.form,
+        like = layui.like;
+
+    // 卡片点击高亮
+    $('#presets-grid').on('click', '.theme-card', function() {
+      $('#presets-grid .theme-card').removeClass('active');
+      $(this).addClass('active');
+      $(this).find('input[type=radio]').prop('checked', true);
+      var preset = $(this).data('preset');
+      $('#custom-color-block').toggle(preset === 'custom');
+    });
+
+    // 颜色 picker <-> 文本同步
+    function bindColor(picker, text) {
+      $(picker).on('input change', function() { $(text).val($(this).val().toUpperCase()); });
+      $(text).on('input change', function() {
+        var v = $(this).val();
+        if (/^#[0-9a-f]{6}$/i.test(v)) $(picker).val(v);
+      });
+    }
+    bindColor('#primary_color_picker', '#primary_color_text');
+    bindColor('#secondary_color_picker', '#secondary_color_text');
+
+    form.on('submit(theme-submit)', function(data) {
+      like.ajax({
+        url: '{:url("ThemeSetting/index")}',
+        data: data.field,
+        type: 'post',
+        success: function(res) {
+          layer.msg(res.msg, { offset: '15px', icon: 1, time: 1500 }, function() {
+            location.href = location.href;
+          });
+        }
+      });
+      return false;
+    });
+  });
+</script>
