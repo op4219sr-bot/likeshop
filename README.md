@@ -15,6 +15,9 @@
 <img  width="19%"  src="/server/public/readme/mobile-5.png" />
 </center> <br>
 </div>
+
+> 📌 **当前稳定版本: v1.0.0** — 已集成易支付 + 5 个 bug 修复 + 性能优化  
+> 📜 完整变更见 [CHANGELOG.md](CHANGELOG.md) | 🔁 回滚操作见下方「[回滚到已知稳定版本](#🔁-回滚到已知稳定版本v100)」一节
  
 ## 🚀🚀🚀docker本地一句命令快速部署体验
 ### 🐳快速部署
@@ -55,6 +58,76 @@ ghcr.io/op4219sr-bot/likeshop:aio-latest
 PC端管理后台：http://127.0.0.1:20208/admin/account/login
 <br>PC端前台：http://127.0.0.1:20208/pc/
 <br>手机端前台：http://127.0.0.1:20208/mobile/
+
+---
+
+## 🔁 回滚到已知稳定版本(v1.0.0)
+
+如果未来某次升级 / 加新功能后,商城出现严重问题,可以**无损回到 v1.0.0 这个已知工作版本**(数据不丢)。
+
+### 🎯 v1.0.0 锚点
+
+| 类型 | 锚点 | 说明 |
+|---|---|---|
+| **Docker 镜像** | `ghcr.io/op4219sr-bot/likeshop:aio-3947186229a365c226d7915510055edd1e9dfc5f` | 永久存在于 GHCR(除非主动删除),拉这个 tag 拿到的永远是 v1.0.0 |
+| **Git 代码** | `release/v1.0.0` 分支 | 永久指向 commit `3947186229a365c226d7915510055edd1e9dfc5f` |
+
+### 🚨 部署级回滚(适用:刚 docker pull 新镜像后发现问题)
+
+最快、最安全。**不动数据**,只把镜像换回 v1.0.0:
+
+```bash
+# 1. 停掉当前容器(数据卷不受影响,数据还在)
+docker stop likeshop
+docker rm likeshop
+
+# 2. 拉 v1.0.0 镜像
+docker pull ghcr.io/op4219sr-bot/likeshop:aio-3947186229a365c226d7915510055edd1e9dfc5f
+
+# 3. 用 v1.0.0 镜像 + 原来的数据卷重新起来
+docker run -d --name likeshop --restart=always -p 20208:80 \
+  -v /var/lib/docker/volumes/likeshop_data/_data:/var/lib/mysql \
+  ghcr.io/op4219sr-bot/likeshop:aio-3947186229a365c226d7915510055edd1e9dfc5f
+```
+
+> ⚠️ `-v` 路径要换成你**原来挂的实际路径**。如果你当初没挂卷(用的是匿名卷),数据在 docker volume 里,先用 `docker volume ls` 找到名字再挂回去。
+
+### 🔧 代码级回滚(适用:自己改了代码后炸了,想回到 v1.0.0 源码)
+
+```bash
+# 1. 切到 release/v1.0.0 分支看代码
+git fetch origin
+git checkout release/v1.0.0
+
+# 2. 或者把 master 强制回到 v1.0.0(危险,会丢 master 上 v1.0.0 之后的所有 commit!)
+# git checkout master
+# git reset --hard 3947186229a365c226d7915510055edd1e9dfc5f
+# git push --force origin master   # 慎用!别人的 clone 会受影响
+```
+
+更稳妥的做法是**新建一个 hotfix 分支**:
+
+```bash
+git checkout -b hotfix/rollback-to-v1.0.0 release/v1.0.0
+# 把你想保留的少量改动 cherry-pick 过来
+# git cherry-pick <commit-sha>
+git push origin hotfix/rollback-to-v1.0.0
+# 然后开 PR 合并到 master
+```
+
+### 🛡 建议:**每个稳定版本都打 release 分支**
+
+后续开发新功能时,在动 master 之前先做:
+
+```bash
+# 当前版本工作正常,做一份镜像快照
+docker tag ghcr.io/op4219sr-bot/likeshop:aio-latest ghcr.io/op4219sr-bot/likeshop:aio-stable-$(date +%F)
+
+# Git 这边创建 release 分支(可以通过 GitHub Web 界面 → branch dropdown → 新建 branch)
+# release/v1.1.0 / release/v1.2.0 ...
+```
+
+这样每个稳定版本都有对应的 docker image tag + git release branch,**回滚永远是一条命令的事**。
 
 ---
 
