@@ -27,7 +27,7 @@ use think\facade\Hook;
 use think\Db;
 class Index extends ApiBase
 {
-   public $like_not_need_login = ['test', 'lists', 'appInit', 'downLine', 'share', 'config','pcLists','copyright'];
+   public $like_not_need_login = ['test', 'lists', 'appInit', 'downLine', 'share', 'config','pcLists','copyright','themeCss'];
     /**
      * note 首页接口
      * create_time 2020/10/21 19:05
@@ -166,9 +166,52 @@ class Index extends ApiBase
             // 首页底部导航菜单
             'navigation_menu' => $navigation,
             // 网站名称
-            'website_name' => ConfigServer::get('website', 'name')
+            'website_name' => ConfigServer::get('website', 'name'),
+            // 主题色配置（本仓库新增，H5 商城读取后注入 CSS 变量做即时换色）
+            'theme' => [
+                'preset'          => ConfigServer::get('theme', 'preset', 'default'),
+                'primary_color'   => ConfigServer::get('theme', 'primary_color', '#FF2C3C'),
+                'secondary_color' => ConfigServer::get('theme', 'secondary_color', '#FF6B35'),
+                'apply_h5'        => intval(ConfigServer::get('theme', 'apply_h5', 1)),
+            ]
         ];
         $this->_success('', $config);
+    }
+
+
+    /**
+     * 主题色 CSS 注入 - H5 商城在 index.html 启动前通过 <link> 加载,实现首屏即应用主题色,无白屏闪烁
+     * 输出纯 CSS,Content-Type: text/css
+     * @notes 本仓库新增
+     */
+    public function themeCss()
+    {
+        $apply  = intval(ConfigServer::get('theme', 'apply_h5', 1));
+        $primary   = ConfigServer::get('theme', 'primary_color', '#FF2C3C');
+        $secondary = ConfigServer::get('theme', 'secondary_color', '#FF6B35');
+        // 关闭主题或为默认色时,输出空 CSS(不影响原版样式)
+        if (!$apply || strtoupper($primary) === '#FF2C3C') {
+            $css = "/* theme disabled or default */";
+        } else {
+            // CSS 变量 + 常见 likeshop 配色选择器全局覆盖
+            $p = htmlspecialchars($primary, ENT_QUOTES);
+            $s = htmlspecialchars($secondary, ENT_QUOTES);
+            $css = ":root{--theme-primary:$p;--theme-secondary:$s;}\n"
+                 // 文字色: 主题红 -> 主题主色
+                 . "[style*=\"color: #FF2C3C\"],[style*=\"color:#FF2C3C\"],[style*=\"color: rgb(255, 44, 60)\"],[style*=\"color:rgb(255,44,60)\"]"
+                 . "{color:$p !important;}\n"
+                 // 背景色: 主题红 -> 主题主色
+                 . "[style*=\"background: #FF2C3C\"],[style*=\"background:#FF2C3C\"],[style*=\"background-color: #FF2C3C\"],[style*=\"background-color:#FF2C3C\"]"
+                 . "{background-color:$p !important;}\n"
+                 // 边框
+                 . "[style*=\"border-color: #FF2C3C\"],[style*=\"border-color:#FF2C3C\"]{border-color:$p !important;}\n"
+                 // likeshop 常用类
+                 . ".primary,.color-red,.red,.text-red,.cart-num{color:$p !important;}\n"
+                 . ".bg-red,.bg-primary,.btn-primary{background-color:$p !important;}\n";
+        }
+        $response = \think\Response::create($css, 'html', 200);
+        $response->header(['Content-Type' => 'text/css; charset=utf-8', 'Cache-Control' => 'public, max-age=60']);
+        return $response;
     }
 
 
