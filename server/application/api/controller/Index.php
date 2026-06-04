@@ -18,6 +18,7 @@
 // +----------------------------------------------------------------------
 
 namespace app\api\controller;
+use app\admin\logic\ThemeSettingLogic;
 use app\api\logic\IndexLogic;
 use app\common\model\Client_;
 use app\common\model\MessageScene_;
@@ -128,46 +129,34 @@ class Index extends ApiBase
           $item['un_selected_icon'] =  empty($item['un_selected_icon']) ? '' : UrlServer::getFileUrl($item['un_selected_icon']);
         }
         $config = [
-            'register_setting' => ConfigServer::get('register_setting', 'open', 0),//注册设置-是否开启短信验证注册
-            'app_wechat_login' => ConfigServer::get('app', 'wechat_login', 0),//APP是否允许微信授权登录
-            'shop_login_logo'  => UrlServer::getFileUrl(ConfigServer::get('website', 'shop_login_logo')),//移动端登录页logo
-            'web_favicon'      => UrlServer::getFileUrl(ConfigServer::get('website', 'web_favicon')),//浏览器标签图标
-            'name'             => ConfigServer::get('website', 'name'),//商城名称
-            'copyright_info'   => ConfigServer::get('copyright', 'company_name'),//版权信息
-            'icp_number'       => ConfigServer::get('copyright', 'number'),//ICP备案号
-            'icp_link'         => ConfigServer::get('copyright', 'link'),//备案号链接
-            'app_agreement'    => ConfigServer::get('app', 'agreement', 0),//app弹出协议
-            'ios_download'     => ConfigServer::get('app', 'line_ios', ''),//ios_app下载链接
-            'android_download' => ConfigServer::get('app', 'line_android', ''),//安卓下载链接
-            'download_doc'     => ConfigServer::get('app', 'download_doc', ''),//app下载文案
-            'cate_style'       => ConfigServer::get('decoration', 'layout_no', 1),//分类页面风格
-            'index_setting' => [ // 首页设置
-              // 热销榜单
+            'register_setting' => ConfigServer::get('register_setting', 'open', 0),
+            'app_wechat_login' => ConfigServer::get('app', 'wechat_login', 0),
+            'shop_login_logo'  => UrlServer::getFileUrl(ConfigServer::get('website', 'shop_login_logo')),
+            'web_favicon'      => UrlServer::getFileUrl(ConfigServer::get('website', 'web_favicon')),
+            'name'             => ConfigServer::get('website', 'name'),
+            'copyright_info'   => ConfigServer::get('copyright', 'company_name'),
+            'icp_number'       => ConfigServer::get('copyright', 'number'),
+            'icp_link'         => ConfigServer::get('copyright', 'link'),
+            'app_agreement'    => ConfigServer::get('app', 'agreement', 0),
+            'ios_download'     => ConfigServer::get('app', 'line_ios', ''),
+            'android_download' => ConfigServer::get('app', 'line_android', ''),
+            'download_doc'     => ConfigServer::get('app', 'download_doc', ''),
+            'cate_style'       => ConfigServer::get('decoration', 'layout_no', 1),
+            'index_setting' => [
               'logo' => ConfigServer::get('decoration', 'index_setting_logo', 1),
-              // 热销榜单
               'hots' => ConfigServer::get('decoration', 'index_setting_hots', 1),
-              // 新品推荐
               'news' => ConfigServer::get('decoration', 'index_setting_news', 1),
-              // 顶部背景图
               'top_bg_image' => UrlServer::getFileUrl(ConfigServer::get('decoration', 'index_setting_top_bg_image', ''))
             ],
-            'center_setting' => [ // 个人中心设置
-              // 顶部背景图
+            'center_setting' => [
               'top_bg_image' => UrlServer::getFileUrl(ConfigServer::get('decoration', 'center_setting_top_bg_image', ''))
             ],
-            'navigation_setting' => [ // 底部导航设置
-              // 未选中文字颜色
+            'navigation_setting' => [
               'ust_color' => ConfigServer::get('decoration', 'navigation_setting_ust_color', '#000000'),
-              // 选中文字颜色
               'st_color' => ConfigServer::get('decoration', 'navigation_setting_st_color', '#000000'),
-              // 顶部背景图
-              // 'top_bg_image' => UrlServer::getFileUrl(ConfigServer::get('decoration', 'navigation_setting_top_bg_image', ''))
             ],
-            // 首页底部导航菜单
             'navigation_menu' => $navigation,
-            // 网站名称
             'website_name' => ConfigServer::get('website', 'name'),
-            // 主题色配置（本仓库新增，H5 商城读取后注入 CSS 变量做即时换色）
             'theme' => [
                 'preset'          => ConfigServer::get('theme', 'preset', 'default'),
                 'primary_color'   => ConfigServer::get('theme', 'primary_color', '#FF2C3C'),
@@ -180,38 +169,160 @@ class Index extends ApiBase
 
 
     /**
-     * 主题色 CSS 注入 - H5 商城在 index.html 启动前通过 <link> 加载,实现首屏即应用主题色,无白屏闪烁
-     * 输出纯 CSS,Content-Type: text/css
+     * 主题色 + 行业布局 CSS 注入 - H5 商城在 index.html 启动前通过 <link> 加载.
+     * 支持 ?preview=<preset> 临时预览任意主题(不修改后台保存的配置), 后台 iframe 预览用.
      * @notes 本仓库新增
      */
     public function themeCss()
     {
-        $apply  = intval(ConfigServer::get('theme', 'apply_h5', 1));
-        $primary   = ConfigServer::get('theme', 'primary_color', '#FF2C3C');
-        $secondary = ConfigServer::get('theme', 'secondary_color', '#FF6B35');
-        // 关闭主题或为默认色时,输出空 CSS(不影响原版样式)
-        if (!$apply || strtoupper($primary) === '#FF2C3C') {
+        $preview = $this->request->get('preview', '');
+        $applyH5 = intval(ConfigServer::get('theme', 'apply_h5', 1));
+
+        // 预览模式: 从 PRESETS 拿配置; 正常模式: 从 DB 拿配置
+        if ($preview && isset(ThemeSettingLogic::PRESETS[$preview])) {
+            $cfg = ThemeSettingLogic::PRESETS[$preview];
+            $preset = $preview;
+            $primary = $cfg['primary'];
+            $secondary = $cfg['secondary'];
+            $traits = $cfg['layout_traits'];
+            $applyH5 = 1; // 预览强制启用
+        } else {
+            $preset = ConfigServer::get('theme', 'preset', 'default');
+            $primary = ConfigServer::get('theme', 'primary_color', '#FF2C3C');
+            $secondary = ConfigServer::get('theme', 'secondary_color', '#FF6B35');
+            $traits = ThemeSettingLogic::getTraits($preset);
+        }
+
+        // 主题未启用 或 默认主题 -> 输出空 CSS, 对未动主题的安装零影响
+        if (!$applyH5 || ($preset === 'default' && $preview === '')) {
             $css = "/* theme disabled or default */";
         } else {
-            // CSS 变量 + 常见 likeshop 配色选择器全局覆盖
-            $p = htmlspecialchars($primary, ENT_QUOTES);
-            $s = htmlspecialchars($secondary, ENT_QUOTES);
-            $css = ":root{--theme-primary:$p;--theme-secondary:$s;}\n"
-                 // 文字色: 主题红 -> 主题主色
-                 . "[style*=\"color: #FF2C3C\"],[style*=\"color:#FF2C3C\"],[style*=\"color: rgb(255, 44, 60)\"],[style*=\"color:rgb(255,44,60)\"]"
-                 . "{color:$p !important;}\n"
-                 // 背景色: 主题红 -> 主题主色
-                 . "[style*=\"background: #FF2C3C\"],[style*=\"background:#FF2C3C\"],[style*=\"background-color: #FF2C3C\"],[style*=\"background-color:#FF2C3C\"]"
-                 . "{background-color:$p !important;}\n"
-                 // 边框
-                 . "[style*=\"border-color: #FF2C3C\"],[style*=\"border-color:#FF2C3C\"]{border-color:$p !important;}\n"
-                 // likeshop 常用类
-                 . ".primary,.color-red,.red,.text-red,.cart-num{color:$p !important;}\n"
-                 . ".bg-red,.bg-primary,.btn-primary{background-color:$p !important;}\n";
+            $css = self::buildThemeCss($primary, $secondary, $traits, $preset);
         }
+
         $response = \think\Response::create($css, 'html', 200);
-        $response->header(['Content-Type' => 'text/css; charset=utf-8', 'Cache-Control' => 'public, max-age=60']);
+        $response->header([
+            'Content-Type'  => 'text/css; charset=utf-8',
+            // 预览不缓存,正常缓存 60 秒
+            'Cache-Control' => $preview ? 'no-store' : 'public, max-age=60',
+        ]);
         return $response;
+    }
+
+    /**
+     * 根据主题色 + layout traits 生成完整 CSS
+     * 主要做两件事:
+     * 1. 用主题色覆盖所有用到默认红的位置(文字/背景/边框/常用类名)
+     * 2. 根据 traits 调整圆角、密度、隐藏/突出板块,做出行业差异
+     */
+    private static function buildThemeCss($primary, $secondary, $traits, $preset)
+    {
+        $p = htmlspecialchars($primary, ENT_QUOTES);
+        $s = htmlspecialchars($secondary, ENT_QUOTES);
+
+        // 圆角等级映射
+        $radius = [
+            'none'   => ['card' => '0',    'btn' => '0',    'banner' => '0',    'badge' => '0'   ],
+            'small'  => ['card' => '4px',  'btn' => '4px',  'banner' => '4px',  'badge' => '2px' ],
+            'medium' => ['card' => '8px',  'btn' => '8px',  'banner' => '8px',  'badge' => '4px' ],
+            'large'  => ['card' => '16px', 'btn' => '24px', 'banner' => '16px', 'badge' => '12px'],
+        ];
+        $r = $radius[$traits['radius'] ?? 'medium'];
+
+        // 密度等级映射 (内边距)
+        $density = [
+            'loose'   => ['pad' => '24px', 'gap' => '20px'],
+            'normal'  => ['pad' => '12px', 'gap' => '12px'],
+            'compact' => ['pad' => '6px',  'gap' => '6px' ],
+        ];
+        $d = $density[$traits['density'] ?? 'normal'];
+
+        // 要隐藏的板块: 关键词匹配, H5 不同版本类名可能不同, 多重命中
+        $hideSelectors = [];
+        $hideMap = [
+            'promo' => [
+                '.bargain', '.lottery', '.luck-draw', '.luckdraw',
+                '[class*="bargain"]', '[class*="lottery"]', '[class*="luckdraw"]', '[class*="luck-draw"]',
+                '.home-bargain', '.home-lottery', '.marketing-bargain',
+            ],
+            'news' => [
+                '.new-recommend', '.news-recommend', '[class*="new-recommend"]', '[class*="news-recommend"]',
+                '.home-news', '.recommend-news',
+            ],
+            'hots' => [
+                '.hot-sale', '.hots', '[class*="hot-sale"]', '[class*="hots-list"]',
+                '.home-hots', '.hot-rank',
+            ],
+            'signin' => [
+                '.sign-in', '.signin', '[class*="sign-in"]', '[class*="signin"]', '.daily-sign',
+            ],
+            'distribution' => [
+                '.distribution', '[class*="distribution"]', '.distributor', '.commission-entry',
+            ],
+        ];
+        foreach (($traits['hide'] ?? []) as $key) {
+            if (isset($hideMap[$key])) {
+                $hideSelectors = array_merge($hideSelectors, $hideMap[$key]);
+            }
+        }
+        $hideRule = '';
+        if ($hideSelectors) {
+            $hideRule = implode(',', $hideSelectors) . "{display:none !important;}\n";
+        }
+
+        // ===== 输出 CSS =====
+        return <<<CSS
+/* 主题: {$preset}  主色: {$p}  辅助色: {$s} */
+:root{
+  --theme-primary: $p;
+  --theme-secondary: $s;
+  --theme-card-radius: {$r['card']};
+  --theme-btn-radius: {$r['btn']};
+  --theme-banner-radius: {$r['banner']};
+  --theme-badge-radius: {$r['badge']};
+  --theme-section-pad: {$d['pad']};
+  --theme-section-gap: {$d['gap']};
+}
+
+/* ===== 主题色覆盖 ===== */
+[style*="color: #FF2C3C"],[style*="color:#FF2C3C"],
+[style*="color: rgb(255, 44, 60)"],[style*="color:rgb(255,44,60)"]{
+  color: var(--theme-primary) !important;
+}
+[style*="background: #FF2C3C"],[style*="background:#FF2C3C"],
+[style*="background-color: #FF2C3C"],[style*="background-color:#FF2C3C"]{
+  background-color: var(--theme-primary) !important;
+}
+[style*="border-color: #FF2C3C"],[style*="border-color:#FF2C3C"]{
+  border-color: var(--theme-primary) !important;
+}
+.primary,.color-red,.red,.text-red,.cart-num,.price,.text-price{
+  color: var(--theme-primary) !important;
+}
+.bg-red,.bg-primary,.btn-primary,.cart-btn,.buy-btn,.confirm-btn{
+  background-color: var(--theme-primary) !important;
+}
+
+/* ===== 圆角统一 (行业风格的核心区分点) ===== */
+.banner,.swiper,[class*="banner"]{
+  border-radius: var(--theme-banner-radius) !important;
+  overflow: hidden;
+}
+.product-card,.goods-card,.cart-item,[class*="product-card"],[class*="goods-card"]{
+  border-radius: var(--theme-card-radius) !important;
+  overflow: hidden;
+}
+button,.btn,.layui-btn,.u-btn,.confirm-btn,.buy-btn,.cart-btn{
+  border-radius: var(--theme-btn-radius) !important;
+}
+.tag,.badge,.label,[class*="tag-"],[class*="badge-"]{
+  border-radius: var(--theme-badge-radius) !important;
+}
+
+/* ===== 板块隐藏 (按 layout traits) ===== */
+$hideRule
+
+CSS;
     }
 
 
