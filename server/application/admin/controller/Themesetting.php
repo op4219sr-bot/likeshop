@@ -14,7 +14,8 @@
 // PSR-4 文件名匹配,Linux 区分大小写,文件名必须是 Themesetting.php.
 //
 // 因此这里采用 ThinkPHP 期望的 PascalCase 命名(首字母大写,其余小写).
-// 同时在文件底部用 class_alias 暴露驼峰版别名,保持向后兼容.
+// 注意: PHP 类名本身大小写不敏感,Themesetting 自动可被当 ThemeSetting 使用,
+// 不需要 class_alias(加了反而会因「重复声明同名类」报 fatal error).
 // +----------------------------------------------------------------------
 
 namespace app\admin\controller;
@@ -41,6 +42,3 @@ class Themesetting extends AdminBase
         return $this->fetch();
     }
 }
-
-// 兼容别名: 如果有外部代码用驼峰版 ThemeSetting 引用,也能找到
-class_alias('app\admin\controller\Themesetting', 'app\admin\controller\ThemeSetting');
