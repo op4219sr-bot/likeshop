@@ -1,10 +1,8 @@
 {layout name="layout1" /}
 <style>
-    /* === 左侧主题选择区 === */
     .theme-layout { display: flex; gap: 24px; align-items: flex-start; }
     .theme-config-pane { flex: 1; min-width: 0; }
     .theme-preview-pane { flex: 0 0 400px; position: sticky; top: 16px; }
-
     .theme-presets { display: flex; flex-wrap: wrap; gap: 12px; padding: 8px 0; }
     .theme-card {
         border: 2px solid #e6e6e6; border-radius: 8px; padding: 12px;
@@ -25,8 +23,6 @@
     .custom-color-block { padding: 12px 0; }
     .custom-color-block input[type=color] { vertical-align: middle; width: 60px; height: 32px; border: 1px solid #ddd; border-radius: 4px; cursor: pointer; padding: 0; }
     .custom-color-block .color-hex { display: inline-block; margin-left: 8px; vertical-align: middle; font-family: monospace; }
-
-    /* === 右侧预览手机框 === */
     .preview-frame {
         background: #1a1a1a; border-radius: 32px; padding: 12px;
         box-shadow: 0 10px 40px rgba(0,0,0,.15);
@@ -35,12 +31,8 @@
         position: relative; width: 376px; height: 720px;
         border-radius: 24px; overflow: hidden; background: #fff;
     }
-    .preview-screen iframe {
-        width: 100%; height: 100%; border: 0; display: block;
-    }
-    .preview-label {
-        text-align: center; color: #666; font-size: 12px; margin-top: 8px;
-    }
+    .preview-screen iframe { width: 100%; height: 100%; border: 0; display: block; }
+    .preview-label { text-align: center; color: #666; font-size: 12px; margin-top: 8px; }
     .preview-loader {
         position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
         background: rgba(255,255,255,.85); z-index: 1; transition: opacity .2s;
@@ -56,10 +48,9 @@
         <div class="layui-colla-item">
           <h2 class="layui-colla-title like-layui-colla-title" style="background-color: #fff">操作提示</h2>
           <div class="layui-colla-content layui-show">
-            <p>*点击左侧任意主题,**右侧手机框立即预览效果**(不会保存)。</p>
-            <p>*确认满意后点「保存设置」,所有用户下次打开 H5 就看到新主题。</p>
-            <p>*不同主题除了**颜色不同**,还有**圆角风格、密度、营销板块的显示**等差异。</p>
-            <p>*药品零售主题会自动隐藏砍价/抽奖等娱乐板块,极简主题会隐藏所有营销板块。</p>
+            <p>*点击左侧任意主题,右侧手机框立即预览(布局/隐藏板块),颜色变化需保存后在 H5 实际看。</p>
+            <p>*点「保存设置」后会直接改写 H5 编译包里的颜色,所有用户下次打开 H5 看到新主题色。</p>
+            <p>*药品零售主题会自动隐藏砍价/抽奖等娱乐板块,极简主题会隐藏几乎所有营销板块。</p>
           </div>
         </div>
       </div>
@@ -82,7 +73,7 @@
 
             <div class="layui-form-item">
               <div class="theme-presets" id="presets-grid">
-                {volist name="presets" id="p" key="k"}
+                {foreach name="presets" key="k" item="p"}
                   <label class="theme-card {if condition="$config.preset eq $k"}active{/if}" data-preset="{$k}">
                     <input type="radio" name="preset" value="{$k}" style="display:none" {if condition="$config.preset eq $k"}checked{/if}>
                     <div class="theme-swatch">
@@ -92,7 +83,7 @@
                     <div class="theme-name">{$p.name}</div>
                     <div class="theme-desc">{$p.desc}</div>
                   </label>
-                {/volist}
+                {/foreach}
                 <label class="theme-card {if condition="$config.preset eq 'custom'"}active{/if}" data-preset="custom">
                   <input type="radio" name="preset" value="custom" style="display:none" {if condition="$config.preset eq 'custom'"}checked{/if}>
                   <div class="theme-swatch">
@@ -170,34 +161,24 @@
   }).extend({
     index: 'lib/index'
   }).use(['index', 'form', 'like'], function() {
-    var $ = layui.$,
-        form = layui.form,
-        like = layui.like;
-
-    var $iframe = $('#preview-iframe');
-    var $loader = $('#preview-loader');
+    var $ = layui.$, form = layui.form, like = layui.like;
+    var $iframe = $('#preview-iframe'), $loader = $('#preview-loader');
 
     function updatePreview(preset) {
       $loader.removeClass('hidden');
       $iframe.attr('src', '/mobile/?theme_preview=' + encodeURIComponent(preset || 'default') + '&_t=' + Date.now());
     }
-    $iframe.on('load', function() {
-      $loader.addClass('hidden');
-    });
+    $iframe.on('load', function() { $loader.addClass('hidden'); });
 
-    // 卡片点击: 高亮 + 触发预览
     $('#presets-grid').on('click', '.theme-card', function() {
       $('#presets-grid .theme-card').removeClass('active');
       $(this).addClass('active');
       $(this).find('input[type=radio]').prop('checked', true);
       var preset = $(this).data('preset');
       $('#custom-color-block').toggle(preset === 'custom');
-      if (preset !== 'custom') {
-        updatePreview(preset);
-      }
+      if (preset !== 'custom') { updatePreview(preset); }
     });
 
-    // 颜色 picker <-> 文本同步, 自定义模式下也触发预览
     function bindColor(picker, text) {
       $(picker).on('input change', function() { $(text).val($(this).val().toUpperCase()); });
       $(text).on('input change', function() {
@@ -208,7 +189,6 @@
     bindColor('#primary_color_picker', '#primary_color_text');
     bindColor('#secondary_color_picker', '#secondary_color_text');
 
-    // 手动刷新预览按钮
     $('#refresh-preview').on('click', function() {
       var preset = $('input[name=preset]:checked').val() || 'default';
       updatePreview(preset);
